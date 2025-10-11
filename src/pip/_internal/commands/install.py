@@ -354,7 +354,47 @@ class InstallCommand(RequirementCommand):
         )
 
         try:
-            reqs = self.get_requirements(args, options, finder, session)
+            # ----------- PATCHED SECTION: collect requirements -----------
+            reqs = []
+            if options.requirements:
+                for filename in options.requirements:
+                    if filename.endswith(".toml"):
+                        # Use TOML lockfile parser
+                        for entry in parse_pylock_toml(filename):
+                            req_str = f"{entry['name']}=={entry['version']}"
+                            req_to_add = InstallRequirement(
+                                req_str,
+                                isolated=options.isolated_mode,
+                                use_pep517=options.use_pep517,
+                                user_supplied=True,
+                            )
+                            # Optionally attach wheel url and hash if needed downstream
+                            req_to_add.lock_wheel_url = entry["wheel_url"]
+                            req_to_add.lock_wheel_hash = entry["wheel_hash"]
+                            reqs.append(req_to_add)
+                    else:
+                        # Standard requirements.txt (each line: 'package==version')
+                        with open(filename, encoding="utf-8") as f:
+                            for line in f:
+                                line = line.strip()
+                                if not line or line.startswith("#"):
+                                    continue
+                                req_to_add = InstallRequirement(
+                                    line,
+                                    isolated=options.isolated_mode,
+                                    use_pep517=options.use_pep517,
+                                    user_supplied=True,
+                                )
+                                reqs.append(req_to_add)
+            for arg in args:
+                req_to_add = InstallRequirement(
+                    arg,
+                    isolated=options.isolated_mode,
+                    use_pep517=options.use_pep517,
+                    user_supplied=True,
+                )
+                reqs.append(req_to_add)
+        # ------------------------------------------------------------
             check_legacy_setup_py_options(options, reqs)
 
             wheel_cache = WheelCache(options.cache_dir)

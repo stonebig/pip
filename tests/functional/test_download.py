@@ -1476,3 +1476,17 @@ def test_canonicalizes_package_name_before_verifying_metadata(
     assert os.listdir(download_dir) == [
         "requires_simple_extra-0.1-py2.py3-none-any.whl",
     ]
+
+def test_download_from_pylock_toml(script: PipTestEnvironment, data: TestData) -> None:
+    pylock_path = data.reqfiles / "pylock.64-3_14_0_2dotb1.toml"
+    result = script.pip(
+        "download",
+        "-d",
+        ".",
+        "-r",
+        pylock_path,
+    )
+    # Example assertion for colorama
+    result.did_create(Path("scratch") / "colorama-0.4.6-py2.py3-none-any.whl")
+    # You can add more for other wheels in the TOML if desired.
+    

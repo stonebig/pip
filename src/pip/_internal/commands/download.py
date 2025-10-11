@@ -7,12 +7,13 @@ from pip._internal.cli.cmdoptions import make_target_python
 from pip._internal.cli.req_command import RequirementCommand, with_cleanup
 from pip._internal.cli.status_codes import SUCCESS
 from pip._internal.operations.build.build_tracker import get_build_tracker
-from pip._internal.req.req_install import check_legacy_setup_py_options
+from pip._internal.req.req_install import check_legacy_setup_py_options, install_req_from_req_string, install_req_from_parsed_requirement
 from pip._internal.utils.misc import ensure_dir, normalize_path, write_output
 from pip._internal.utils.temp_dir import TempDirectory
 
-logger = logging.getLogger(__name__)
+from pip._internal.req.pylock_parser import parse_pylock_toml
 
+logger = logging.getLogger(__name__)
 
 class DownloadCommand(RequirementCommand):
     """
@@ -22,8 +23,7 @@ class DownloadCommand(RequirementCommand):
     - VCS project urls.
     - Local project directories.
     - Local or remote source archives.
-
-    pip also supports downloading from "requirements files", which provide
+    pip also supports downloading from \"requirements files\", which provide
     an easy way to specify a whole environment to be downloaded.
     """
 
@@ -76,8 +76,6 @@ class DownloadCommand(RequirementCommand):
     @with_cleanup
     def run(self, options: Values, args: list[str]) -> int:
         options.ignore_installed = True
-        # editable doesn't really make sense for `pip download`, but the bowels
-        # of the RequirementSet code require that property.
         options.editables = []
 
         cmdoptions.check_dist_restriction(options)
@@ -103,7 +101,30 @@ class DownloadCommand(RequirementCommand):
             globally_managed=True,
         )
 
-        reqs = self.get_requirements(args, options, finder, session)
+        reqs = []
+        for filename in options.requirements:
+            if filename.endswith(".toml"):
+                # Use pylock.toml parser
+                for entry in parse_pylock_toml(filename):
+                    req_str = f"{entry['name']}=={entry['version']}"
+                    req_to_add = install_req_from_req_string(
+                        req_str,
+                        isolated=options.isolated_mode,
+                        use_pep517=options.use_pep517,
+                        user_supplied=True,
+                    )
+                    req_to_add.lock_wheel_url = entry["wheel_url"]
+                    req_to_add.lock_wheel_hash = entry["wheel_hash"]
+                    reqs.append(req_to_add)
+            else:
+                # Standard requirements.txt
+                for parsed_req in parse_requirements(filename, finder=finder, options=options, session=session):
+                    req_to_add = install_req_from_parsed_requirement(parsed_req,
+                        isolated=options.isolated_mode,
+                        use_pep517=options.use_pep517,
+                        user_supplied=True)
+                    reqs.append(req_to_add)
+
         check_legacy_setup_py_options(options, reqs)
 
         preparer = self.make_requirement_preparer(
@@ -130,7 +151,7 @@ class DownloadCommand(RequirementCommand):
 
         requirement_set = resolver.resolve(reqs, check_supported_wheels=True)
 
-        downloaded: list[str] = []
+        downloaded = []
         for req in requirement_set.requirements.values():
             if req.satisfied_by is None:
                 assert req.name is not None
