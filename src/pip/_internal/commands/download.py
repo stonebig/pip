@@ -7,7 +7,12 @@ from pip._internal.cli.cmdoptions import make_target_python
 from pip._internal.cli.req_command import RequirementCommand, with_cleanup
 from pip._internal.cli.status_codes import SUCCESS
 from pip._internal.operations.build.build_tracker import get_build_tracker
-from pip._internal.req.req_install import check_legacy_setup_py_options, install_req_from_req_string, install_req_from_parsed_requirement
+from pip._internal.req.req_install import check_legacy_setup_py_options
+
+from pip._internal.req.constructors import (
+    install_req_from_req_string,
+    install_req_from_parsed_requirement,
+)
 from pip._internal.utils.misc import ensure_dir, normalize_path, write_output
 from pip._internal.utils.temp_dir import TempDirectory
 
