@@ -56,6 +56,9 @@ from pip._internal.utils.temp_dir import TempDirectory
 from pip._internal.utils.unpacking import unpack_file
 from pip._internal.vcs import vcs
 
+import hashlib
+from pip._internal.exceptions import InstallationError
+
 if TYPE_CHECKING:
     from pip._internal.cli.progress_bars import BarType
 
@@ -121,7 +124,20 @@ def get_http_url(
         from_path, content_type = download(link, temp_dir.path)
         if hashes:
             hashes.check_against_path(from_path)
-
+    # --- PATCH: strict hash checking for TOML lockfile wheels ---
+    #if install_req and hasattr(install_req, "lock_wheel_hash") and install_req.lock_wheel_hash:
+    #    hasher = hashlib.sha256()
+    #    with open(from_path, "rb") as f:
+    #        for chunk in iter(lambda: f.read(8192), b""):
+    #            hasher.update(chunk)
+    #    computed_hash = hasher.hexdigest()
+    #    if computed_hash != install_req.lock_wheel_hash:
+    #        raise InstallationError(
+    #            f"Hash mismatch for wheel downloaded from {getattr(install_req, 'lock_wheel_url', link.url)}:\n"
+    #            f"Expected: {install_req.lock_wheel_hash}\n"
+    #            f"Got: {computed_hash}"
+    #        )
+    # --- END PATCH ---
     return File(from_path, content_type)
 
 
@@ -444,7 +460,7 @@ class RequirementPreparer:
             return None
 
         wheel = Wheel(link.filename)
-        name = wheel.name
+        name = canonicalize_name(wheel.name)
         logger.info(
             "Obtaining dependency information from %s %s",
             name,
